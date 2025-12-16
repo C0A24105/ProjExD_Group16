@@ -242,12 +242,20 @@ class Score:
         screen.blit(self.image, self.rect)
 
 class HP:
-    def HP(self):
-        """
-        こうかとんの体力を管理する関数
-        """
-        self.max_hp = 3
-        self.current_hp = 3
+    """
+    こうかとんの体力を表示するクラス
+    """
+    def __init__(self, hp=5):
+        self.font = pg.font.Font(None, 50)
+        self.color = (255, 0, 0)
+        self.value = hp
+        self.image = self.font.render(f"HP: {self.value}", 0, self.color)
+        self.rect = self.image.get_rect()
+        self.rect.center = 100, HEIGHT-100  # スコアの上
+
+    def update(self, screen: pg.Surface):
+        self.image = self.font.render(f"HP: {self.value}", 0, self.color)
+        screen.blit(self.image, self.rect)
 
 class Heal:
     def heal(self):
@@ -262,13 +270,13 @@ def main():
     screen = pg.display.set_mode((WIDTH, HEIGHT))
     bg_img = pg.image.load(f"fig/pg_bg.jpg")
     score = Score()
+    hp = HP(5)
 
     bird = Bird(3, (900, 400))
     bombs = pg.sprite.Group()
     beams = pg.sprite.Group()
     exps = pg.sprite.Group()
     emys = pg.sprite.Group()
-    hp = HP()
 
     tmr = 0
     clock = pg.time.Clock()
@@ -298,17 +306,29 @@ def main():
             exps.add(Explosion(bomb, 50))  # 爆発エフェクト
             score.value += 1  # 1点アップ
 
-        for bomb in pg.sprite.spritecollide(bird, bombs, True):  # こうかとんと衝突した爆弾リスト
-            bird.change_img(8, screen)  # こうかとん悲しみエフェクト
-            score.update(screen)
-            hp.current_hp -= 1  # 体力を1減少
-            if hp.current_hp <= 0:
+        for bomb in pg.sprite.spritecollide(bird, bombs, True): # こうかとんと衝突した爆弾リスト
+            hp.value -= 1 # 体力を1減算
+            bird.change_img(8, screen) # こうかとん被弾エフェクト
+
+            if hp.value <= 0: # 体力が0以下ならゲームオーバー
+                score.update(screen)
+                hp.update(screen)
                 pg.display.update()
                 time.sleep(2)
                 return
-            
-            
 
+        for emy in pg.sprite.spritecollide(bird, emys, True): # こうかとんと衝突した敵機リスト
+            hp.value -= 1 # 体力を1減算
+            bird.change_img(8, screen) # こうかとん被弾エフェクト
+
+            if hp.value <= 0: # 体力が0以下ならゲームオーバー
+                score.update(screen)
+                hp.update(screen)
+                pg.display.update()
+                time.sleep(2)
+                return
+
+        hp.update(screen)
         bird.update(key_lst, screen)
         beams.update()
         beams.draw(screen)
