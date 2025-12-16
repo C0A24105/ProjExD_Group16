@@ -241,6 +241,22 @@ class Score:
         self.image = self.font.render(f"Score: {self.value}", 0, self.color)
         screen.blit(self.image, self.rect)
 
+class HP:
+    def HP(self):
+        """
+        こうかとんの体力を管理する関数
+        """
+        self.max_hp = 3
+        self.current_hp = 3
+
+class Heal:
+    def heal(self):
+        """
+        こうかとんの体力を回復させるメソッド
+        """
+        if self.current_hp < self.max_hp:
+            self.current_hp += 1
+
 def main():
     pg.display.set_caption("真！こうかとん無双")
     screen = pg.display.set_mode((WIDTH, HEIGHT))
@@ -252,6 +268,7 @@ def main():
     beams = pg.sprite.Group()
     exps = pg.sprite.Group()
     emys = pg.sprite.Group()
+    hp = HP()
 
     tmr = 0
     clock = pg.time.Clock()
@@ -284,9 +301,13 @@ def main():
         for bomb in pg.sprite.spritecollide(bird, bombs, True):  # こうかとんと衝突した爆弾リスト
             bird.change_img(8, screen)  # こうかとん悲しみエフェクト
             score.update(screen)
-            pg.display.update()
-            time.sleep(2)
-            return
+            hp.current_hp -= 1  # 体力を1減少
+            if hp.current_hp <= 0:
+                pg.display.update()
+                time.sleep(2)
+                return
+            
+            
 
         bird.update(key_lst, screen)
         beams.update()
