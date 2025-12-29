@@ -8,9 +8,10 @@ import pygame as pg
 # =====================
 # 基本設定・定数
 # =====================
-WIDTH = 1100  # ゲームウィンドウの幅
-HEIGHT = 650  # ゲームウィンドウの高さ
+WIDTH = 550  # ゲームウィンドウの幅
+HEIGHT = 750  # ゲームウィンドウの高さ
 AUTO_FIRE_INTERVAL = 20
+
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
 # スキル名辞書
@@ -80,6 +81,28 @@ def draw_exp_bar(screen, bird):
     txt = font.render(f"Lv.{bird.level}", True, (255, 255, 255))
     screen.blit(txt, (bar_w + 30, 15))
 
+def draw_player_hp(screen, bird):
+    """画面左上にプレイヤーのHPバーを表示"""
+    bar_x, bar_y = 20, 50  # 経験値バー(y=20)の下に表示
+    bar_w, bar_h = 200, 15
+    
+    # HPの割合計算
+    ratio = bird.hp / bird.max_hp
+    if ratio < 0: ratio = 0
+    fill_w = int(bar_w * ratio)
+    
+    # バーの背景（暗い赤）
+    pg.draw.rect(screen, (50, 0, 0), [bar_x, bar_y, bar_w, bar_h])
+    # HP残量（明るい赤）
+    pg.draw.rect(screen, (255, 0, 0), [bar_x, bar_y, fill_w, bar_h])
+    # 枠線（白）
+    pg.draw.rect(screen, (255, 255, 255), [bar_x, bar_y, bar_w, bar_h], 2)
+    
+    # 文字表示
+    font = pg.font.Font(None, 24)
+    txt = font.render(f"HP: {int(bird.hp)}/{bird.max_hp}", True, (255, 255, 255))
+    screen.blit(txt, (bar_x + bar_w + 10, bar_y))
+
 def draw_skill_select(screen, choices):
     """レベルアップ時のスキル選択画面を描画"""
     overlay = pg.Surface((WIDTH, HEIGHT))
@@ -143,7 +166,8 @@ class Bird(pg.sprite.Sprite):
         self.image = self.imgs[self.dire]
         self.rect = self.image.get_rect(center=xy)
         self.speed = 10
-        
+        self.max_hp = 100       # 最大HP
+        self.hp = self.max_hp   # 現在のHP
         # --- スキル・ステータス関連 ---
         self.level = 1
         self.exp = 0
@@ -202,6 +226,32 @@ class Bird(pg.sprite.Sprite):
 
         self.timer += 1
         screen.blit(self.image, self.rect)
+
+    def draw_hp(self, screen):
+        """頭上にHPバーを表示する"""
+        # バーの位置とサイズ
+        bar_w = self.rect.width        # 幅はキャラと同じ
+        bar_h = 5                      # 高さは5px
+        bar_x = self.rect.left
+        bar_y = self.rect.top - 10     # キャラクターの10px上
+        
+        # HPの割合計算
+        ratio = self.hp / self.max_hp
+        if ratio < 0: ratio = 0
+        fill_w = int(bar_w * ratio)
+        
+        # 背景（暗いグレー）
+        pg.draw.rect(screen, (50, 50, 50), [bar_x, bar_y, bar_w, bar_h])
+        
+        # HP残量（緑色：敵の赤と区別しやすくするため）
+        # HPが少なくなったら色を変えるなどの演出もここで可能です
+        color = (0, 255, 0)
+        if ratio < 0.3:
+            color = (255, 0, 0) # ピンチのときは赤
+        elif ratio < 0.6:
+            color = (255, 255, 0) # 半分以下は黄色
+
+        pg.draw.rect(screen, color, [bar_x, bar_y, fill_w, bar_h])
 
     def shoot(self, beams_group):
         """現在のスキル状況に応じてビームを発射する"""
@@ -265,7 +315,7 @@ class Beam(pg.sprite.Sprite):
                 self.reflect_count -= 1
                 # 画像の回転は複雑になるので今回は省略するか、簡易的に反転
                 self.angle = 180 - self.angle
-                self.image = pg.transform.rotozoom(pg.image.load(f"fig/beam.png"), self.angle, 1.0)
+                self.image = pg.transform.rotozoom(pg.image.load(f"fig/star.png"), self.angle, 1.0)
             else:
                 self.kill()
         
@@ -278,12 +328,24 @@ class Beam(pg.sprite.Sprite):
             else:
                 self.kill()
 
-
+class DamageText(pg.sprite.Sprite):
+    """
+    ダメージ値を画面上にポップアップ表示するクラス
+    """
+    def __init__(self, damage: int, center: tuple[int, int], color=(255, 0, 0)):
+        super().__init__()
+        self.image = pg.font.Font(None, 40).render(str(damage), True, color)
+        self.rect = self.image.get_rect(center=center)
+        self.life, self.vy = 30, -2 # 30フレーム表示し、上に移動する
+    def update(self):
+        self.rect.y += self.vy; self.life -= 1
+        if self.life < 0: self.kill()
+        
 class Enemy(pg.sprite.Sprite):
     """敵機クラス（HP制）"""
     imgs = [pg.image.load(f"fig/alien{i}.png") for i in range(1, 4)]
     
-    def __init__(self, level=1):
+    def __init__(self, level):
         super().__init__()
         self.image = pg.transform.rotozoom(random.choice(__class__.imgs), 0, 0.8)
         self.rect = self.image.get_rect()
@@ -293,7 +355,7 @@ class Enemy(pg.sprite.Sprite):
         self.state = "down"
         self.interval = random.randint(50, 300)
 
-        self.max_hp = 1
+        self.max_hp = level
         self.hp = self.max_hp
 
     def update(self):
@@ -327,6 +389,12 @@ class Bomb(pg.sprite.Sprite):
         self.rect.centery = emy.rect.centery + emy.rect.height//2
         self.speed = 6
         self.hp = 1 # 爆弾は1発で壊れる
+
+    def update(self):
+        """爆弾を移動させる処理"""
+        self.rect.move_ip(self.speed * self.vx, self.speed * self.vy)
+        if check_bound(self.rect) != (True, True):
+            self.kill()
 
 class Explosion(pg.sprite.Sprite):
     """爆発クラス"""
@@ -378,18 +446,58 @@ class Heal(pg.sprite.Sprite):
 # =====================
 # メインループ
 # =====================
+class Sound:
+    """
+    サウンド管理クラス
+    他の機能を搭載したときに音声を流す
+    """
+    def __init__(self):
+        self.enemy_kill = pg.mixer.Sound("sound/explosion.mp3")  # 敵を倒したときの音
+        self.damage = pg.mixer.Sound("sound/damage.mp3")  # 被ダメ時の音声
+        self.death = pg.mixer.Sound("sound/himei.mp3")  # 自分が倒された時の音声
+        self.level_up = pg.mixer.Sound("sound/level_up.mp3")  # レベルが上がった時の音
+        self.recovery = pg.mixer.Sound("sound/recovery.mp3")  # 回復した時の音  
+
+        pg.mixer.music.load("sound/bgm.mp3")  # bgm
+
+    def play_bgm(self):
+        pg.mixer.music.play(loops=-1)
+
+    def stop_bgm(self):  # 自分が倒されたときにbgmをとめる
+        pg.mixer.music.stop()
+
+    def play_enemy_kill(self):
+        self.enemy_kill.play()
+
+    def play_damage(self):
+        self.damage.play()
+
+    def play_death(self):
+        self.death.play()
+
+    def play_level_up(self):
+        self.level_up.play()
+
+    def play_recovery(self):
+        self.recovery.play()
+
+
+
 def main():
     pg.display.set_caption("真！こうかとん無双 - Survivor Mode")
     screen = pg.display.set_mode((WIDTH, HEIGHT))
-    bg_img = pg.image.load(f"fig/pg_bg.jpg")
+    bg_img = pg.image.load(f"fig/universe.jpg")
     score = Score()
+    sounds = Sound()
+    sounds.play_bgm()
 
-    bird = Bird(3, (900, 400))
+    bird = Bird(3, (225, 400))
     bombs = pg.sprite.Group()
     beams = pg.sprite.Group()
     exps = pg.sprite.Group() 
     emys = pg.sprite.Group()
     heals = pg.sprite.Group()
+    
 
 
     tmr = 0
@@ -427,9 +535,13 @@ def main():
             # 敵の出現
             if tmr % 10 == 0:
                 # 時間経過で敵が少し強くなる
-                difficulty = 1 + (tmr // 1000)
+                difficulty = 1 + (tmr // 500)
                 emys.add(Enemy(level=difficulty))
 
+            # 回復アイテムの出現
+            if tmr % 500 == 0: 
+                heals.add(Heal())
+                
             # 爆弾投下
             for emy in emys:
                 if emy.state == "stop" and tmr % emy.interval == 0:
@@ -460,11 +572,13 @@ def main():
                             beam.kill()
                             
                         if emy.hp <= 0:
+                            sounds.play_enemy_kill()
                             exps.add(Explosion(emy, 100))
                             score.value += 10
                             emy.kill()
                             # 経験値ゲット & レベルアップ判定
                             if bird.gain_exp(30):
+                                sounds.play_level_up()
                                 game_state = "SELECT"
                                 # ランダムに3つのスキルを提示
                                 all_skills = list(bird.skill.keys())
@@ -481,17 +595,30 @@ def main():
                     game_state = "SELECT"
                     skill_choices = random.sample(list(bird.skill.keys()), 3)
 
-            # プレイヤー被弾判定（即ゲームオーバー）
-            if len(pg.sprite.spritecollide(bird, bombs, True)) > 0 or \
-               len(pg.sprite.spritecollide(bird, emys, True)) > 0:
+            # プレイヤー被弾判定
+            for bomb in pg.sprite.spritecollide(bird, bombs, True):
+                sounds.play_damage()
+                bird.hp -= 20        # ダメージ量
+                exps.add(Explosion(bomb, 50))
+
+            if bird.hp <= 0:
+                sounds.stop_bgm()
                 bird.change_img(8, screen)
                 score.update(screen)
                 pg.display.update()
+                sounds.play_death()
                 time.sleep(2)
                 return
+            
+            for heal in pg.sprite.spritecollide(bird, heals, True):
+                sounds.play_recovery()
+                heal_amount = int(bird.max_hp * 0.3)   # 最大HPの30%
+                bird.hp = min(bird.max_hp, bird.hp + heal_amount)
+                exps.add(DamageText(heal_amount, bird.rect.center, color=(0, 255, 0)))
 
             # 更新と描画
             bird.update(key_lst, screen, targets)
+            bird.draw_hp(screen)
             beams.update()
             beams.draw(screen)
             emys.update()
@@ -502,6 +629,8 @@ def main():
             bombs.draw(screen)
             exps.update()
             exps.draw(screen)
+            heals.update()
+            heals.draw(screen)
             score.update(screen)
             
             # UI描画
